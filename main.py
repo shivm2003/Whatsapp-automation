@@ -11,136 +11,93 @@ import os
 import pyperclip
 import random
 import time
+from selenium.webdriver.common.action_chains import ActionChains
+import undetected_chromedriver as uc
 from utils import (
     random_delay, 
-    type_like_human, 
+    type_like_human_advanced, 
     simulate_mouse_movement, 
-    configure_stealth_options, 
-    apply_stealth_cdp
+    apply_advanced_stealth_cdp,
+    parse_spintax,
+    get_fingerprint_options,
+    anti_detection_delay,
+    should_rotate_session,
+    apply_network_conditions,
+    apply_canvas_stealth,
+    apply_audio_stealth,
+    apply_font_stealth,
+    apply_visibility_stealth,
+    apply_media_stealth,
+    apply_webrtc_stealth,
+    get_proxy
 )
 
 DELAY = 30
 IMAGE_PATH = r"C:\Users\shivam\Downloads\whatsapp-bulk-messenger-primary\whatsapp-bulk-messenger-primary\image_converted.jpg"
 
-def send_image_your_way(driver, image_path):
-    """Your workflow: + button -> Photos & Videos -> type path -> Enter -> wait 3s -> Enter"""
+def send_image_stealth(driver, image_path):
+    """Send image - most reliable method, avoids menu navigation"""
     try:
-        print("📎 Clicking + (attachment) button...")
+        # Method 1: Direct file input injection (most reliable)
+        print("📎 Finding file input element...")
         
-        # Find and click the + / clip / attachment button
-        plus_selectors = [
-            "//button[@data-testid='clip']",
-            "//div[@data-testid='clip']",
-            "//span[@data-icon='clip']",
-            "//button[contains(@title, 'Attach')]",
-            "//div[contains(@title, 'Attach')]",
-            "//button[contains(@class, 'attach')]",
-            "//span[contains(@data-icon, 'attach')]"
-        ]
+        # The file input is always present, just hidden
+        file_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']"))
+        )
         
-        plus_btn = None
-        for selector in plus_selectors:
-            try:
-                plus_btn = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, selector))
-                )
-                break
-            except:
-                continue
-        
-        if not plus_btn:
-            raise Exception("Could not find + (attachment) button")
-        
-        plus_btn.click()
-        random_delay(1.5, 2.8)  # Wait for menu to open
-        
-        # NEW: Select "Photos & Videos" option
-        print("🖼️  Selecting 'Photos & Videos' option...")
-        
-        photos_videos_selectors = [
-            "//div[contains(text(), 'Photos & Videos')]",
-            "//span[contains(text(), 'Photos & Videos')]",
-            "//button[contains(., 'Photos & Videos')]",
-            "//div[contains(@data-testid, 'photo')]",
-            "//div[contains(@data-testid, 'gallery')]",
-            "//span[contains(@data-icon, 'image')]/parent::*/parent::*",
-            "//span[contains(@data-icon, 'image')]/ancestor::button",
-            "//span[contains(@data-icon, 'image')]/ancestor::div[contains(@role, 'button')]",
-            "//div[text()='Photos & Videos']",
-            "//*[contains(text(), 'Photos') and contains(text(), 'Videos')]"
-        ]
-        
-        photos_option = None
-        for selector in photos_videos_selectors:
-            try:
-                photos_option = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, selector))
-                )
-                break
-            except:
-                continue
-        
-        if photos_option:
-            photos_option.click()
-            print("✅ 'Photos & Videos' selected")
-            random_delay(1.5, 2.5)
-        else:
-            print("⚠️  Could not find 'Photos & Videos', trying file input directly...")
-        
-        print("📁 Typing file path...")
-        
-        # Find the file input (hidden or visible)
-        file_inputs = driver.find_elements(By.XPATH, "//input[@type='file']")
-        
-        if not file_inputs:
-            raise Exception("No file input found")
-        
-        # Use the first available file input
-        file_input = file_inputs[0]
+        # Scroll to it first (safest)
+        driver.execute_script("arguments[0].scrollIntoView(true);", file_input)
+        random_delay(0.5, 1.0)
         
         # Send the file path
         abs_path = os.path.abspath(image_path)
         file_input.send_keys(abs_path)
         
-        print(f"✅ Path entered: {abs_path}")
-        random_delay(0.8, 1.8)
+        # Wait for preview to load
+        print("⏳ Waiting for image preview...")
+        random_delay(4.0, 6.0)
         
-        # Press Enter to select/open
-        print("⏩ Pressing Enter...")
-        file_input.send_keys(Keys.RETURN)
+        # Click send
+        print("📤 Sending image...")
+        send_btn = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-testid='send'], [data-testid='send-media']"))
+        )
         
-        # Wait 3 seconds as you requested
-        print("⏳ Waiting 3 seconds...")
-        random_delay(3.0, 4.2)
+        actions = ActionChains(driver)
+        actions.move_to_element(send_btn).pause(random.uniform(0.4, 1.0)).click().perform()
         
-        # Press Enter again to confirm/send
-        print("⏩ Pressing Enter again to send...")
-        
-        # Try multiple ways to press Enter
-        try:
-            # Method 1: Send Enter to body
-            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.RETURN)
-        except:
-            pass
-            
-        try:
-            # Method 2: Find send button and click (fallback)
-            send_btn = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//div[@data-testid='send'] | //div[@data-testid='send-media']"))
-            )
-            send_btn.click()
-        except:
-            # Method 3: Action chains Enter key
-            from selenium.webdriver.common.action_chains import ActionChains
-            actions = ActionChains(driver)
-            actions.send_keys(Keys.RETURN).perform()
-        
-        print("📸 Image sent!")
-        random_delay(3.0, 5.0)  # Wait for image to actually send
+        print("✅ Image sent")
+        random_delay(5.0, 8.0)
         
     except Exception as e:
-        print(f"❌ Error in image sending: {e}")
-        raise
+        print(f"⚠️ Method 1 failed ({e}), trying method 2...")
+        
+        try:
+            # Method 2: Click clip button then use file input
+            clip = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-testid='clip'], [data-icon='clip']"))
+            )
+            clip.click()
+            random_delay(1.5, 3.0)
+            
+            # Now find file input (it becomes active)
+            file_input = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']"))
+            )
+            file_input.send_keys(os.path.abspath(image_path))
+            random_delay(4.0, 6.0)
+            
+            send_btn = WebDriverWait(driver, 15).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-testid='send']"))
+            )
+            actions = ActionChains(driver)
+            actions.move_to_element(send_btn).pause(random.uniform(0.4, 1.0)).click().perform()
+            print("✅ Image sent (method 2)")
+            random_delay(5.0, 8.0)
+        except Exception as e2:
+            print(f"❌ All image methods failed: {e2}")
+            raise
 
 def send_text_message(driver, message):
     """Send text message after image"""
@@ -152,6 +109,7 @@ def send_text_message(driver, message):
             "//div[@data-testid='conversation-compose-box-input']",
             "//div[@contenteditable='true' and @data-tab='1']",
             "//div[contains(@class, 'copyable-text') and @contenteditable='true']",
+            "//div[contains(@class, 'lexical-rich-text-input')]//div[@contenteditable='true']",
             "//footer//div[@contenteditable='true']"
         ]
         
@@ -168,8 +126,8 @@ def send_text_message(driver, message):
         if not input_box:
             raise Exception("Could not find message input box")
         
-        # Type message like human (using character-by-character or paste with random preparation delay)
-        type_like_human(input_box, message)
+        # Type message like human with typos
+        type_like_human_advanced(input_box, message)
         random_delay(0.5, 1.2)
         
         # Press Enter or click send
@@ -177,8 +135,9 @@ def send_text_message(driver, message):
         
         # Try clicking send button first
         try:
+            send_btn_xpath = "//button[@data-testid='send'] | //span[@data-icon='send']/.. | //button[@aria-label='Send']"
             send_btn = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[@data-testid='send']"))
+                EC.element_to_be_clickable((By.XPATH, send_btn_xpath))
             )
             # Hover/move to button briefly before clicking
             try:
@@ -202,17 +161,45 @@ def send_text_message(driver, message):
 def validate_number(number):
     """Clean and validate number"""
     number = number.strip().replace("+", "").replace(" ", "").replace("-", "")
-    # Add country code if missing (assuming India +91)
-    if not number.startswith("91") and len(number) == 10:
-        number = "91" + number
     return number
 
-def send_messages(driver, numbers, message, image_path=None):
+def random_human_behavior(driver):
+    """Occasionally click around like a real user"""
+    if random.random() > 0.1:  # 10% chance
+        return
+    
+    print("👀 Simulating human behavior: Checking around...")
+    try:
+        actions = ActionChains(driver)
+        
+        # Scroll down slowly
+        body = driver.find_element(By.TAG_NAME, "body")
+        actions.move_to_element(body).perform()
+        
+        # Random scroll
+        driver.execute_script(f"window.scrollBy(0, {random.randint(50, 200)});")
+        random_delay(0.5, 1.0)
+        
+        # Click somewhere safe (like a chat header)
+        elements_to_click = driver.find_elements(
+            By.CSS_SELECTOR, 
+            "[data-testid='conversation-header'], [data-testid='chat-list-search']"
+        )
+        if elements_to_click and random.random() < 0.3:
+            target = random.choice(elements_to_click)
+            actions.move_to_element(target).pause(0.3).click().perform()
+            random_delay(1.0, 2.0)
+            
+    except:
+        pass
+
+def send_messages(driver, numbers, base_message, image_path=None):
     total = len(numbers)
     
     # Initialize batch settings
-    batch_limit = random.randint(5, 8)
+    batch_limit = random.randint(10, 15)
     sent_in_batch = 0
+    failures = 0
     
     for idx, number in enumerate(numbers):
         number = validate_number(number)
@@ -221,36 +208,59 @@ def send_messages(driver, numbers, message, image_path=None):
             continue
 
         print(f'\n{"="*60}')
-        print(f'📱 {idx+1}/{total} => Processing +{number}')
+        print(f'📱 {idx+1}/{total} => Processing {number}')
         print(f'{"="*60}')
 
         try:
+            # Random human behavior
+            random_human_behavior(driver)
+
             # Simulate random mouse movement/wiggles before starting contact search
             simulate_mouse_movement(driver)
             random_delay(1.0, 2.5)
 
             # 1. Click search button
             print("🔍 Clicking new chat/search button...")
+            search_selectors = (
+                "button[data-testid='new-chat'], "
+                "div[data-testid='new-chat'], "
+                "span[data-icon='new-chat'], "
+                "span[data-icon='new-chat-outline'], "
+                "span[data-icon='chat'], "
+                "div[aria-label='New chat'], "
+                "[title='New chat']"
+            )
+            
             try:
                 search_btn = WebDriverWait(driver, 15).until(
-                    EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/div/div[3]/div/div[3]/header/header/div/span/div/div[1]/span/div/button/div/div/div[1]/span'))
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, search_selectors))
                 )
-                # Hover first
-                try:
-                    from selenium.webdriver.common.action_chains import ActionChains
-                    ActionChains(driver).move_to_element(search_btn).perform()
-                    random_delay(0.2, 0.6)
-                except:
-                    pass
+            except:
+                # If still fails, try to find it via presence instead of clickability
+                search_btn = driver.find_element(By.CSS_SELECTOR, search_selectors)
+                
+            ActionChains(driver).move_to_element(search_btn).perform()
+            random_delay(0.2, 0.6)
+            try:
                 search_btn.click()
-            except Exception as e:
-                print("⚠️ Could not click search button")
+            except:
+                driver.execute_script("arguments[0].click();", search_btn)
             random_delay(1.5, 3.0)
             
             # 2. Fill number in search bar
             print("⌨️  Typing number in search bar...")
+            search_bar_selectors = (
+                "input[aria-label='Search name or number'], "
+                "input[placeholder='Search name or number'], "
+                "input[aria-label='Search or start a new chat'], "
+                "div[contenteditable='true'][data-tab='3'], "
+                "div[data-testid='chat-list-search'], "
+                "div[contenteditable='true'][aria-label='Search name or number'], "
+                "div[contenteditable='true'][data-lexical-editor='true'], "
+                "div.lexical-rich-text-input div[contenteditable='true']"
+            )
             search_bar = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div/div/div/div/div[3]/div/div[2]/div[1]/div/span/div/span/div/div[1]/div/div/div/div/div/div[2]/input'))
+                EC.presence_of_element_located((By.CSS_SELECTOR, search_bar_selectors))
             )
             # Clear search bar just in case
             search_bar.click()
@@ -268,15 +278,16 @@ def send_messages(driver, numbers, message, image_path=None):
             # 3. Click the result
             print("👆 Clicking the contact result...")
             try:
-                result = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/div/div[3]/div/div[2]/div[1]/div/span/div/span/div/div[3]/div[2]/div[2]/div[2]/div[2]/div'))
+                result_selectors = (
+                    "div[data-testid^='list-item-'], "
+                    "div[data-testid='cell-frame-container'], "
+                    "div[role='listitem']"
                 )
-                try:
-                    from selenium.webdriver.common.action_chains import ActionChains
-                    ActionChains(driver).move_to_element(result).perform()
-                    random_delay(0.2, 0.5)
-                except:
-                    pass
+                result = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, result_selectors))
+                )
+                ActionChains(driver).move_to_element(result).perform()
+                random_delay(0.2, 0.5)
                 result.click()
                 print("✅ Chat loaded")
                 random_delay(1.5, 3.0) # Wait for chat to open
@@ -286,63 +297,80 @@ def send_messages(driver, numbers, message, image_path=None):
             
             # Send Image (if specified) and/or Text Message
             if image_path:
-                send_image_your_way(driver, image_path)
+                send_image_stealth(driver, image_path)
+            
+            # Prepare dynamic message
+            message = parse_spintax(base_message) if base_message else None
+            
             if message:
                 send_text_message(driver, message)
             
-            print(f'✅ Completed for +{number}')
+            print(f'✅ Completed for {number}')
             sent_in_batch += 1
+            failures = 0 # Reset failures on success
             
             # Anti-ban delay & batch cooldown between contacts
             if idx < total - 1:  # Only sleep if we have more contacts to process
-                if sent_in_batch >= batch_limit:
-                    # Batch limit reached! Take a longer rest
-                    cooldown = random.uniform(75.0, 150.0)
-                    print(f"\n☕ Batch limit of {batch_limit} reached. Taking a longer cooldown of {cooldown:.2f}s...")
-                    time.sleep(cooldown)
-                    # Reset batch settings
-                    batch_limit = random.randint(5, 8)
-                    sent_in_batch = 0
-                else:
-                    # Regular random delay between contacts
-                    wait_time = random.uniform(15.0, 28.0)
-                    print(f"⏳ Waiting {wait_time:.2f}s before next contact...")
-                    time.sleep(wait_time)
+                anti_detection_delay(driver, idx + 1, sent_in_batch)
 
         except Exception as e:
-            print(f'❌ Failed for +{number}: {str(e)[:100]}')
+            print(f'❌ Failed for {number}: {str(e)[:100]}')
             try:
                 driver.save_screenshot(f"error_{number}.png")
-                print("📸 Screenshot saved")
+                with open(f"error_{number}.html", "w", encoding="utf-8") as f:
+                    f.write(driver.page_source)
+                print("📸 Screenshot and HTML saved")
             except:
                 pass
+            failures += 1
+            if failures >= 3:
+                print("⚠️ Too many failures in a row, aborting batch to rotate session.")
+                return idx + 1 # Return number of contacts processed
             continue
+            
+    return total
 
-def get_driver():
-    options = Options()
+def get_driver_with_rotation(session_num=1):
+    """Get a fresh driver, optionally rotating profile"""
+    options = get_fingerprint_options()
+    
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--start-maximized")
-    options.add_experimental_option("excludeSwitches", ["enable-logging"])
-    options.add_argument("user-data-dir=C:/temp/chrome-profile")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--disable-infobars")
     
-    # Apply anti-bot stealth options
-    options = configure_stealth_options(options)
+    # Proxy configuration (Optional)
+    proxy = get_proxy()
+    if proxy:
+        options.add_argument(f'--proxy-server={proxy}')
+        print(f"🌐 Using proxy: {proxy}")
     
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
+    # Use persistent profile directory with rotation
+    profile_base = os.path.join(os.path.dirname(__file__), "profiles")
+    os.makedirs(profile_base, exist_ok=True)
+    profile_dir = os.path.join(profile_base, f"profile_{session_num}")
+    os.makedirs(profile_dir, exist_ok=True)
+    options.add_argument(f"--user-data-dir={profile_dir}")
     
-    # Apply CDP stealth script
-    apply_stealth_cdp(driver)
+    driver = uc.Chrome(options=options)
     
-    return driver
+    # Apply ALL stealth patches
+    apply_advanced_stealth_cdp(driver)
+    apply_canvas_stealth(driver)
+    apply_audio_stealth(driver)
+    apply_font_stealth(driver)
+    apply_visibility_stealth(driver)
+    apply_media_stealth(driver)
+    apply_webrtc_stealth(driver)
+    apply_network_conditions(driver)
+    
+    driver.implicitly_wait(10)
+    return driver, profile_dir
 
 def main():
     print("\n" + "="*60)
-    print("WHATSAPP BULK SENDER - IMAGE THEN TEXT")
+    print("WHATSAPP BULK SENDER - ADVANCED STEALTH")
     print("="*60)
     
     # Check files
@@ -373,18 +401,42 @@ def main():
     print(f"🖼️  Image: {'Yes' if send_image else 'No'}")
     print("\n" + "-"*60)
 
-    driver = get_driver()
+    total_sent = 0
+    session_num = 1
     
-    print("🔐 Opening WhatsApp Web...")
-    driver.get('https://web.whatsapp.com')
+    while total_sent < len(numbers):
+        driver, profile = get_driver_with_rotation(session_num)
+        print(f"\n🔄 Starting session #{session_num} with profile: {profile}")
+        
+        driver.get('https://web.whatsapp.com')
+        
+        # Check if already logged in by looking for chat list
+        logged_in = False
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid='chat-list'], [aria-label='Chat list']"))
+            )
+            print("✅ Session restored from persistent profile")
+            logged_in = True
+        except:
+            pass
+            
+        if not logged_in:
+            input("🔐 Scan QR code and press ENTER when chats are visible...")
+        
+        # Process batch (rotate session every 80-120 numbers)
+        batch_size = random.randint(80, 120)
+        batch = numbers[total_sent:total_sent + batch_size]
+        
+        processed_count = send_messages(driver, batch, message, IMAGE_PATH if send_image else None)
+        
+        total_sent += processed_count
+        print(f"✅ Session #{session_num} done: Processed up to {total_sent}/{len(numbers)} total")
+        driver.quit()
+        session_num += 1
     
-    input("\n👉 Scan QR code and press ENTER when ready...")
-
-    send_messages(driver, numbers, message, IMAGE_PATH if send_image else None)
-
-    driver.quit()
     print("\n" + "="*60)
-    print("✅ ALL MESSAGES SENT!")
+    print(f"✅ ALL {total_sent} MESSAGES SENT ACROSS {session_num - 1} SESSIONS!")
     print("="*60)
 
 

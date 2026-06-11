@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 delivered.txt
 image_converted.jpg
+profiles/
+error_*.png
+error_*.html
