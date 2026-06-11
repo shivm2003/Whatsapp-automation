@@ -49,21 +49,29 @@ def simulate_mouse_movement(driver):
     """Simulates realistic mouse movements/scrolling to mimic human presence."""
     try:
         actions = ActionChains(driver)
-        # Find the body to determine viewport/bounds
-        body = driver.find_element(By.TAG_NAME, "body")
-        width = body.size.get('width', 1024)
-        height = body.size.get('height', 768)
         
-        # Limit offsets to viewport safe area
-        max_w = min(width - 10, 800)
-        max_h = min(height - 10, 600)
+        # First, move to a safe element to establish baseline position
+        try:
+            body = driver.find_element(By.TAG_NAME, "body")
+            # Move to center of body to establish a starting position
+            actions.move_to_element(body).perform()
+        except:
+            pass
         
         steps = random.randint(2, 4)
         print(f"🖱️  Simulating {steps} random mouse movements...")
+        
+        actions = ActionChains(driver)  # Reset actions
         for _ in range(steps):
-            x_offset = random.randint(10, max_w)
-            y_offset = random.randint(10, max_h)
-            actions.move_to_element_with_offset(body, x_offset, y_offset).perform()
+            # Use small relative offsets from current position
+            x_offset = random.randint(-50, 50)
+            y_offset = random.randint(-40, 40)
+            try:
+                actions.move_by_offset(x_offset, y_offset)
+                actions.perform()
+            except:
+                # If even small offset fails, just skip
+                pass
             random_delay(0.2, 0.6)
     except Exception as e:
         print(f"⚠️  Mouse movement simulation skipped: {e}")
