@@ -1,0 +1,5 @@
+chrome-profile/
+__pycache__/
+*.pyc
+delivered.txt
+image_converted.jpg
