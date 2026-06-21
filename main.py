@@ -33,76 +33,46 @@ from utils import (
 )
 
 DELAY = 30
-IMAGE_PATH = r"C:\Users\shivam\Downloads\whatsapp-bulk-messenger-primary\whatsapp-bulk-messenger-primary\image_converted.jpg"
 
-def send_image_stealth(driver, image_path):
-    """Send image - most reliable method, avoids menu navigation"""
+def click_back_button(driver):
+    """Click the WhatsApp back button to return to main chat list"""
     try:
-        # Method 1: Direct file input injection (most reliable)
-        print("📎 Finding file input element...")
-        
-        # The file input is always present, just hidden
-        file_input = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']"))
+        back_selectors = [
+            "[data-testid='back-refreshed']",
+            "[data-icon='back-refreshed']",
+            "[aria-label='Back']",
+        ]
+        for sel in back_selectors:
+            try:
+                back_btn = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
+                )
+                back_btn.click()
+                random_delay(0.8, 1.5)
+                print("↩️  Clicked back button")
+                return True
+            except:
+                continue
+        # XPath fallback
+        back_btn = driver.find_element(
+            By.XPATH,
+            "//*[@id='app']/div/div/div[3]/div/div[2]/div[1]/div/span/div/span/div/header/div/div[1]/div/span/div/button"
         )
-        
-        # Scroll to it first (safest)
-        driver.execute_script("arguments[0].scrollIntoView(true);", file_input)
-        random_delay(0.5, 1.0)
-        
-        # Send the file path
-        abs_path = os.path.abspath(image_path)
-        file_input.send_keys(abs_path)
-        
-        # Wait for preview to load
-        print("⏳ Waiting for image preview...")
-        random_delay(4.0, 6.0)
-        
-        # Click send
-        print("📤 Sending image...")
-        send_btn = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-testid='send'], [data-testid='send-media']"))
-        )
-        
-        actions = ActionChains(driver)
-        actions.move_to_element(send_btn).pause(random.uniform(0.4, 1.0)).click().perform()
-        
-        print("✅ Image sent")
-        random_delay(5.0, 8.0)
-        
+        back_btn.click()
+        random_delay(0.8, 1.5)
+        print("↩️  Clicked back button (XPath fallback)")
+        return True
     except Exception as e:
-        print(f"⚠️ Method 1 failed ({e}), trying method 2...")
-        
-        try:
-            # Method 2: Click clip button then use file input
-            clip = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-testid='clip'], [data-icon='clip']"))
-            )
-            clip.click()
-            random_delay(1.5, 3.0)
-            
-            # Now find file input (it becomes active)
-            file_input = WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='file']"))
-            )
-            file_input.send_keys(os.path.abspath(image_path))
-            random_delay(4.0, 6.0)
-            
-            send_btn = WebDriverWait(driver, 15).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-testid='send']"))
-            )
-            actions = ActionChains(driver)
-            actions.move_to_element(send_btn).pause(random.uniform(0.4, 1.0)).click().perform()
-            print("✅ Image sent (method 2)")
-            random_delay(5.0, 8.0)
-        except Exception as e2:
-            print(f"❌ All image methods failed: {e2}")
-            raise
+        print(f"⚠️  Could not click back button: {e}")
+        return False
+
+
+
 
 def send_text_message(driver, message):
     """Send text message after image"""
     try:
-        print("💬 Typing message...")
+        print("[*] Typing message...")
         
         # Find message input box
         input_selectors = [
@@ -126,12 +96,31 @@ def send_text_message(driver, message):
         if not input_box:
             raise Exception("Could not find message input box")
         
-        # Type message like human with typos
-        type_like_human_advanced(input_box, message)
-        random_delay(0.5, 1.2)
+        input_box.click()
+        random_delay(0.3, 0.6)
         
-        # Press Enter or click send
-        print("📤 Sending message...")
+        # Split message into lines and type each line.
+        # Use Shift+Enter between lines so it stays as ONE message bubble.
+        lines = message.split('\n')
+        modifier = Keys.CONTROL  # Windows/Linux
+        
+        for line_idx, line in enumerate(lines):
+            if line:
+                # Paste the line via clipboard to handle emojis and long text safely
+                pyperclip.copy(line)
+                input_box.send_keys(modifier + 'v')
+                random_delay(0.15, 0.4)
+            
+            # After every line except the last, press Shift+Enter to add a newline
+            # WITHOUT sending the message
+            if line_idx < len(lines) - 1:
+                input_box.send_keys(Keys.SHIFT, Keys.RETURN)
+                random_delay(0.1, 0.25)
+        
+        random_delay(0.4, 0.8)
+        
+        # Now send the complete message (all lines as one bubble)
+        print("[*] Sending message...")
         
         # Try clicking send button first
         try:
@@ -151,17 +140,19 @@ def send_text_message(driver, message):
             # Fallback to Enter key
             input_box.send_keys(Keys.RETURN)
         
-        print("✅ Message sent!")
+        print("[+] Message sent!")
         random_delay(1.5, 3.0)
         
     except Exception as e:
-        print(f"❌ Error sending text: {e}")
+        print(f"[!] Error sending text: {e}")
         raise
+
 
 def validate_number(number):
     """Clean and validate number"""
     number = number.strip().replace("+", "").replace(" ", "").replace("-", "")
     return number
+
 
 def move_number_to_delivered(number):
     """Move processed number from numbers.txt to delivered.txt"""
@@ -183,12 +174,13 @@ def move_number_to_delivered(number):
     except Exception as e:
         print(f"⚠️ Error updating numbers/delivered files: {e}")
 
+
 def random_human_behavior(driver):
     """Occasionally click around like a real user"""
     if random.random() > 0.1:  # 10% chance
         return
     
-    print("👀 Simulating human behavior: Checking around...")
+    print("[*] Simulating human behavior: Checking around...")
     try:
         actions = ActionChains(driver)
         
@@ -213,7 +205,8 @@ def random_human_behavior(driver):
     except:
         pass
 
-def send_messages(driver, numbers, base_message, image_path=None):
+
+def send_messages(driver, numbers, base_message):
     total = len(numbers)
     
     # Initialize batch settings
@@ -228,7 +221,7 @@ def send_messages(driver, numbers, base_message, image_path=None):
             continue
 
         print(f'\n{"="*60}')
-        print(f'📱 {idx+1}/{total} => Processing {number}')
+        print(f'[*] {idx+1}/{total} => Processing {number}')
         print(f'{"="*60}')
 
         try:
@@ -240,7 +233,7 @@ def send_messages(driver, numbers, base_message, image_path=None):
             random_delay(1.0, 2.5)
 
             # 1. Click search button
-            print("🔍 Clicking new chat/search button...")
+            print("[*] Clicking new chat/search button...")
             search_selectors = (
                 "button[data-testid='new-chat'], "
                 "div[data-testid='new-chat'], "
@@ -268,7 +261,7 @@ def send_messages(driver, numbers, base_message, image_path=None):
             random_delay(1.5, 3.0)
             
             # 2. Fill number in search bar
-            print("⌨️  Typing number in search bar...")
+            print("[*] Typing number in search bar...")
             search_bar_selectors = (
                 "input[aria-label='Search name or number'], "
                 "input[placeholder='Search name or number'], "
@@ -296,7 +289,7 @@ def send_messages(driver, numbers, base_message, image_path=None):
             random_delay(3.5, 5.5)  # Wait for results to load
             
             # 3. Click the result
-            print("👆 Clicking the contact result...")
+            print("[*] Clicking the contact result...")
             try:
                 result_selectors = (
                     "div[data-testid^='list-item-'], "
@@ -309,23 +302,29 @@ def send_messages(driver, numbers, base_message, image_path=None):
                 ActionChains(driver).move_to_element(result).perform()
                 random_delay(0.2, 0.5)
                 result.click()
-                print("✅ Chat loaded")
+                print("[+] Chat loaded")
                 random_delay(1.5, 3.0) # Wait for chat to open
             except Exception as e:
-                print("❌ Contact not found or clickable")
+                print("[!] Contact not found or clickable")
+                # Go back to main chat list so next search works cleanly
+                click_back_button(driver)
+                random_delay(0.5, 1.0)
+                move_number_to_delivered(number)
+                failures += 1
+                if failures >= 10:
+                    print("[!] 10 continuous errors detected. Stopping the entire script for safety.")
+                    import sys
+                    sys.exit(1)
                 continue
-            
-            # Send Image (if specified) and/or Text Message
-            if image_path:
-                send_image_stealth(driver, image_path)
             
             # Prepare dynamic message
             message = parse_spintax(base_message) if base_message else None
             
+            # ONLY SEND TEXT MESSAGE
             if message:
                 send_text_message(driver, message)
             
-            print(f'✅ Completed for {number}')
+            print(f'[+] Completed for {number}')
             sent_in_batch += 1
             failures = 0 # Reset failures on success
             
@@ -336,24 +335,27 @@ def send_messages(driver, numbers, base_message, image_path=None):
                 anti_detection_delay(driver, idx + 1, sent_in_batch)
 
         except Exception as e:
-            print(f'❌ Failed for {number}: {str(e)[:100]}')
+            safe_error_msg = str(e)[:100].encode('ascii', 'ignore').decode('ascii')
+            print(f'[!] Failed for {number}: {safe_error_msg}')
             try:
                 driver.save_screenshot(f"error_{number}.png")
                 with open(f"error_{number}.html", "w", encoding="utf-8") as f:
                     f.write(driver.page_source)
-                print("📸 Screenshot and HTML saved")
+                print("[*] Screenshot and HTML saved")
             except:
                 pass
             failures += 1
             
             move_number_to_delivered(number)
             
-            if failures >= 3:
-                print("⚠️ Too many failures in a row, aborting batch to rotate session.")
-                return idx + 1 # Return number of contacts processed
+            if failures >= 10:
+                print("[!] 10 continuous errors detected. Stopping the entire script for safety.")
+                import sys
+                sys.exit(1)
             continue
             
     return total
+
 
 def get_driver_with_rotation(session_num=1):
     """Get a fresh driver, optionally rotating profile"""
@@ -378,7 +380,10 @@ def get_driver_with_rotation(session_num=1):
     os.makedirs(profile_dir, exist_ok=True)
     options.add_argument(f"--user-data-dir={profile_dir}")
     
-    driver = uc.Chrome(options=options)
+    driver = uc.Chrome(
+        options=options,
+        version_main=149
+    )
     
     # Apply ALL stealth patches
     apply_advanced_stealth_cdp(driver)
@@ -392,6 +397,7 @@ def get_driver_with_rotation(session_num=1):
     
     driver.implicitly_wait(10)
     return driver, profile_dir
+
 
 def main():
     print("\n" + "="*60)
@@ -407,12 +413,7 @@ def main():
         print("❌ message.txt not found!")
         return
     
-    if not os.path.exists(IMAGE_PATH):
-        print(f"⚠️  Image not found at: {IMAGE_PATH}")
-        send_image = False
-    else:
-        print(f"✅ Image found: {os.path.basename(IMAGE_PATH)}")
-        send_image = True
+    # --- IMAGE CODE REMOVED ---
 
     # Read files
     with open("numbers.txt", "r") as f:
@@ -421,17 +422,21 @@ def main():
     with open("message.txt", "r", encoding="utf8") as f:
         message = f.read().strip()
 
-    print(f"\n📱 Numbers: {len(numbers)}")
-    print(f"📝 Message: {message[:50]}..." if len(message) > 50 else f"📝 Message: {message}")
-    print(f"🖼️  Image: {'Yes' if send_image else 'No'}")
-    print("\n" + "-"*60)
+    try:
+        print(f"\n[+] Numbers: {len(numbers)}")
+        print(f"[+] Message: {message[:50]}..." if len(message) > 50 else f"[+] Message: {message}")
+        print("\n" + "-"*60)
+    except UnicodeEncodeError:
+        print(f"\n[+] Numbers: {len(numbers)}")
+        print(f"[+] Message: (Message contains unicode characters that can't be printed to terminal)")
+        print("\n" + "-"*60)
 
     total_sent = 0
     session_num = 1
     
     while total_sent < len(numbers):
         driver, profile = get_driver_with_rotation(session_num)
-        print(f"\n🔄 Starting session #{session_num} with profile: {profile}")
+        print(f"\n[*] Starting session #{session_num} with profile: {profile}")
         
         driver.get('https://web.whatsapp.com')
         
@@ -441,27 +446,27 @@ def main():
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid='chat-list'], [aria-label='Chat list']"))
             )
-            print("✅ Session restored from persistent profile")
+            print("[+] Session restored from persistent profile")
             logged_in = True
         except:
             pass
             
         if not logged_in:
-            input("🔐 Scan QR code and press ENTER when chats are visible...")
+            input("[!] Scan QR code and press ENTER when chats are visible...")
         
         # Process batch (rotate session every 80-120 numbers)
         batch_size = random.randint(80, 120)
         batch = numbers[total_sent:total_sent + batch_size]
         
-        processed_count = send_messages(driver, batch, message, IMAGE_PATH if send_image else None)
+        processed_count = send_messages(driver, batch, message)
         
         total_sent += processed_count
-        print(f"✅ Session #{session_num} done: Processed up to {total_sent}/{len(numbers)} total")
+        print(f"[+] Session #{session_num} done: Processed up to {total_sent}/{len(numbers)} total")
         driver.quit()
         session_num += 1
     
     print("\n" + "="*60)
-    print(f"✅ ALL {total_sent} MESSAGES SENT ACROSS {session_num - 1} SESSIONS!")
+    print(f"[+] ALL {total_sent} MESSAGES SENT ACROSS {session_num - 1} SESSIONS!")
     print("="*60)
 
 

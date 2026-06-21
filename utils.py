@@ -25,7 +25,7 @@ def type_like_human(element, text):
     
     # If the text is short, type character-by-character
     if len(text) <= 120:
-        print("⌨️  Typing message character-by-character...")
+        print("[*] Typing message character-by-character...")
         for char in text:
             element.send_keys(char)
             # Normal keypress delay
@@ -38,7 +38,7 @@ def type_like_human(element, text):
     else:
         # For longer messages, copy & paste is safer to prevent long typing windows, 
         # but we add some preparation delay.
-        print("📋 Pasting message with natural preparation delay...")
+        print("[*] Pasting message with natural preparation delay...")
         pyperclip.copy(text)
         
         # Determine the modifier key (Ctrl for Windows/Linux, Command for macOS)
@@ -60,7 +60,7 @@ def simulate_mouse_movement(driver):
             pass
         
         steps = random.randint(2, 4)
-        print(f"🖱️  Simulating {steps} random mouse movements...")
+        print(f"[*] Simulating {steps} random mouse movements...")
         
         actions = ActionChains(driver)  # Reset actions
         for _ in range(steps):
@@ -75,7 +75,7 @@ def simulate_mouse_movement(driver):
                 pass
             random_delay(0.2, 0.6)
     except Exception as e:
-        print(f"⚠️  Mouse movement simulation skipped: {e}")
+        print(f"[!] Mouse movement simulation skipped: {e}")
 
 def configure_stealth_options(options):
     """Applies browser options to make Selenium less detectable."""
@@ -247,12 +247,12 @@ def anti_detection_delay(driver, sent_count, batch_count):
     # Longer delay after every 5-8 messages
     if batch_count > 0 and batch_count % random.randint(5, 8) == 0:
         base_delay += random.uniform(60, 120)
-        print(f"☕ Taking extended break ({base_delay:.0f}s)...")
+        print(f"[*] Taking extended break ({base_delay:.0f}s)...")
     
     # Random longer pauses (mimics checking phone)
     if random.random() < 0.15:  # 15% chance
         base_delay += random.uniform(45, 90)
-        print(f"📱 Long pause ({base_delay:.0f}s)...")
+        print(f"[*] Long pause ({base_delay:.0f}s)...")
     
     # Exponential backoff as total messages increase
     if sent_count > 50:
@@ -260,7 +260,7 @@ def anti_detection_delay(driver, sent_count, batch_count):
     if sent_count > 100:
         base_delay *= 2.0
     
-    print(f"⏳ Waiting {base_delay:.0f}s...")
+    print(f"[*] Waiting {base_delay:.0f}s...")
     smart_wait(driver, base_delay, base_delay + 5.0)
 
 def should_rotate_session(sent_count, failures):
