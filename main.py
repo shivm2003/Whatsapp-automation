@@ -163,6 +163,26 @@ def validate_number(number):
     number = number.strip().replace("+", "").replace(" ", "").replace("-", "")
     return number
 
+def move_number_to_delivered(number):
+    """Move processed number from numbers.txt to delivered.txt"""
+    try:
+        with open("delivered.txt", "a", encoding="utf-8") as f:
+            f.write(number + "\n")
+            
+        if os.path.exists("numbers.txt"):
+            with open("numbers.txt", "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            
+            with open("numbers.txt", "w", encoding="utf-8") as f:
+                for line in lines:
+                    if line.strip() and not line.startswith("#"):
+                        cleaned_line = validate_number(line)
+                        if cleaned_line == number:
+                            continue  # Skip this number to remove it
+                    f.write(line)
+    except Exception as e:
+        print(f"⚠️ Error updating numbers/delivered files: {e}")
+
 def random_human_behavior(driver):
     """Occasionally click around like a real user"""
     if random.random() > 0.1:  # 10% chance
@@ -309,6 +329,8 @@ def send_messages(driver, numbers, base_message, image_path=None):
             sent_in_batch += 1
             failures = 0 # Reset failures on success
             
+            move_number_to_delivered(number)
+            
             # Anti-ban delay & batch cooldown between contacts
             if idx < total - 1:  # Only sleep if we have more contacts to process
                 anti_detection_delay(driver, idx + 1, sent_in_batch)
@@ -323,6 +345,9 @@ def send_messages(driver, numbers, base_message, image_path=None):
             except:
                 pass
             failures += 1
+            
+            move_number_to_delivered(number)
+            
             if failures >= 3:
                 print("⚠️ Too many failures in a row, aborting batch to rotate session.")
                 return idx + 1 # Return number of contacts processed
