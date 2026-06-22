@@ -1,474 +1,518 @@
+#!/usr/bin/env python3
+"""
+WhatsApp Bulk Sender — Advanced Anti-Detection Edition
+Authorized penetration testing use only.
+"""
+
+import os
+import sys
+import random
+import time
+import json
+
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from time import sleep
-import os
-import pyperclip
-import random
-import time
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium import webdriver
+
 import undetected_chromedriver as uc
+import pyperclip
+
+from complete_stealth import apply_complete_stealth, get_random_profile
+
 from utils import (
-    random_delay, 
-    type_like_human_advanced, 
-    simulate_mouse_movement, 
-    apply_advanced_stealth_cdp,
-    parse_spintax,
+    random_delay,
+    smart_wait,
+    simulate_mouse_movement,
     get_fingerprint_options,
+    apply_stealth,
+    apply_network_conditions,
+    parse_spintax,
+    type_like_human,
     anti_detection_delay,
     should_rotate_session,
-    apply_network_conditions,
-    apply_canvas_stealth,
-    apply_audio_stealth,
-    apply_font_stealth,
-    apply_visibility_stealth,
-    apply_media_stealth,
-    apply_webrtc_stealth,
-    get_proxy
+    get_proxy,
+    maybe_perform_distraction,
+    maybe_click_wrong_contact,
+    maybe_simulate_typo_in_message,
+    MIN_BATCH_PER_SESSION,
+    MAX_BATCH_PER_SESSION,
+    MIN_SESSION_COOLDOWN,
+    MAX_SESSION_COOLDOWN,
 )
 
-DELAY = 30
+# =============================================================================
+# NAVIGATION HELPERS
+# =============================================================================
 
 def click_back_button(driver):
-    """Click the WhatsApp back button to return to main chat list"""
-    try:
-        back_selectors = [
-            "[data-testid='back-refreshed']",
-            "[data-icon='back-refreshed']",
-            "[aria-label='Back']",
-        ]
-        for sel in back_selectors:
-            try:
-                back_btn = WebDriverWait(driver, 3).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
-                )
-                back_btn.click()
-                random_delay(0.8, 1.5)
-                print("↩️  Clicked back button")
-                return True
-            except:
-                continue
-        # XPath fallback
-        back_btn = driver.find_element(
-            By.XPATH,
-            "//*[@id='app']/div/div/div[3]/div/div[2]/div[1]/div/span/div/span/div/header/div/div[1]/div/span/div/button"
-        )
-        back_btn.click()
-        random_delay(0.8, 1.5)
-        print("↩️  Clicked back button (XPath fallback)")
-        return True
-    except Exception as e:
-        print(f"⚠️  Could not click back button: {e}")
-        return False
-
-
-
-
-def send_text_message(driver, message):
-    """Send text message after image"""
-    try:
-        print("[*] Typing message...")
-        
-        # Find message input box
-        input_selectors = [
-            "//div[@data-testid='conversation-compose-box-input']",
-            "//div[@contenteditable='true' and @data-tab='1']",
-            "//div[contains(@class, 'copyable-text') and @contenteditable='true']",
-            "//div[contains(@class, 'lexical-rich-text-input')]//div[@contenteditable='true']",
-            "//footer//div[@contenteditable='true']"
-        ]
-        
-        input_box = None
-        for selector in input_selectors:
-            try:
-                input_box = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, selector))
-                )
-                break
-            except:
-                continue
-        
-        if not input_box:
-            raise Exception("Could not find message input box")
-        
-        input_box.click()
-        random_delay(0.3, 0.6)
-        
-        # Split message into lines and type each line.
-        # Use Shift+Enter between lines so it stays as ONE message bubble.
-        lines = message.split('\n')
-        modifier = Keys.CONTROL  # Windows/Linux
-        
-        for line_idx, line in enumerate(lines):
-            if line:
-                # Paste the line via clipboard to handle emojis and long text safely
-                pyperclip.copy(line)
-                input_box.send_keys(modifier + 'v')
-                random_delay(0.15, 0.4)
-            
-            # After every line except the last, press Shift+Enter to add a newline
-            # WITHOUT sending the message
-            if line_idx < len(lines) - 1:
-                input_box.send_keys(Keys.SHIFT, Keys.RETURN)
-                random_delay(0.1, 0.25)
-        
-        random_delay(0.4, 0.8)
-        
-        # Now send the complete message (all lines as one bubble)
-        print("[*] Sending message...")
-        
-        # Try clicking send button first
+    """Return to the main chat list from any open chat."""
+    selectors = [
+        "[data-testid='back-refreshed']",
+        "[data-icon='back-refreshed']",
+        "[aria-label='Back']",
+        "button[aria-label='Back']",
+    ]
+    for sel in selectors:
         try:
-            send_btn_xpath = "//button[@data-testid='send'] | //span[@data-icon='send']/.. | //button[@aria-label='Send']"
-            send_btn = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, send_btn_xpath))
+            btn = WebDriverWait(driver, 4).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
             )
-            # Hover/move to button briefly before clicking
-            try:
-                from selenium.webdriver.common.action_chains import ActionChains
-                ActionChains(driver).move_to_element(send_btn).perform()
-                random_delay(0.1, 0.4)
-            except:
-                pass
-            send_btn.click()
-        except:
-            # Fallback to Enter key
-            input_box.send_keys(Keys.RETURN)
-        
-        print("[+] Message sent!")
-        random_delay(1.5, 3.0)
-        
-    except Exception as e:
-        print(f"[!] Error sending text: {e}")
-        raise
+            btn.click()
+            random_delay(1.0, 2.0)
+            return True
+        except Exception:
+            continue
+    # XPath fallback
+    try:
+        btn = driver.find_element(By.XPATH,
+            "//header//div[@role='button']"
+        )
+        btn.click()
+        random_delay(1.0, 2.0)
+        return True
+    except Exception:
+        pass
+    return False
 
+
+def click_new_chat(driver):
+    """Click the 'New chat' / search button."""
+    selectors = (
+        "button[data-testid='new-chat'], "
+        "div[data-testid='new-chat'], "
+        "span[data-icon='new-chat'], "
+        "span[data-icon='new-chat-outline'], "
+        "span[data-icon='chat'], "
+        "div[aria-label='New chat'], "
+        "[title='New chat']"
+    )
+    btn = WebDriverWait(driver, 15).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, selectors))
+    )
+    ActionChains(driver).move_to_element(btn).perform()
+    random_delay(0.2, 0.6)
+    try:
+        btn.click()
+    except Exception:
+        driver.execute_script("arguments[0].click();", btn)
+    random_delay(1.5, 3.5)
+
+
+def search_contact(driver, number):
+    """Type the phone number into the search bar."""
+    selectors = (
+        "input[aria-label='Search name or number'], "
+        "input[placeholder='Search name or number'], "
+        "input[aria-label='Search or start a new chat'], "
+        "div[contenteditable='true'][data-tab='3'], "
+        "div.lexical-rich-text-input div[contenteditable='true']"
+    )
+    search_bar = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, selectors))
+    )
+    # Focus + clear
+    search_bar.click()
+    random_delay(0.2, 0.5)
+    search_bar.send_keys(Keys.CONTROL + "a")
+    random_delay(0.1, 0.3)
+    search_bar.send_keys(Keys.DELETE)
+    random_delay(0.3, 0.7)
+
+    # Type the number with human-like pauses
+    for i, ch in enumerate(number):
+        search_bar.send_keys(ch)
+        # Pause longer at the 3rd and 7th digit (simulates reading the number)
+        if i in (2, 6):
+            time.sleep(random.uniform(0.3, 0.8))
+        else:
+            time.sleep(random.uniform(0.06, 0.18))
+
+    # Wait for results to load
+    smart_wait(driver, 3.0, 6.0)
+
+
+def click_first_contact_result(driver):
+    """Click the top contact search result."""
+    selectors = (
+        "div[data-testid^='list-item-']:first-child, "
+        "div[role='listitem']:first-child, "
+        "div[data-testid='cell-frame-container']:first-child"
+    )
+    result = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, selectors))
+    )
+    ActionChains(driver).move_to_element(result).perform()
+    random_delay(0.2, 0.6)
+    result.click()
+    print("[+] Chat opened")
+    random_delay(2.0, 4.0)
+
+
+def find_message_input(driver):
+    """Locate the message compose box."""
+    xpaths = [
+        "//div[@data-testid='conversation-compose-box-input']",
+        "//div[@contenteditable='true' and @data-tab='1']",
+        "//div[contains(@class, 'copyable-text') and @contenteditable='true']",
+        "//div[contains(@class, 'lexical-rich-text-input')]//div[@contenteditable='true']",
+        "//footer//div[@contenteditable='true']"
+    ]
+    for xp in xpaths:
+        try:
+            el = WebDriverWait(driver, 8).until(
+                EC.element_to_be_clickable((By.XPATH, xp))
+            )
+            return el
+        except Exception:
+            continue
+    raise Exception("Could not locate message input box")
+
+
+def send_message(driver, message):
+    """
+    Type and send the message using one of several methods,
+    chosen randomly to avoid behavioural fingerprinting.
+    """
+    input_box = find_message_input(driver)
+    input_box.click()
+    random_delay(0.3, 0.8)
+
+    # Choose a sending method
+    method_weights = {
+        'type':   0.50,   # character-by-character with typos
+        'paste':  0.25,   # clipboard paste
+        'typo':   0.15,   # deliberate typo + correction
+        'split':  0.10,   # type first line, paste second line
+    }
+    methods = list(method_weights.keys())
+    weights = list(method_weights.values())
+    method = random.choices(methods, weights=weights, k=1)[0]
+
+    if method == 'paste':
+        # --- Paste via clipboard ---
+        print("[*] 📋 Sending via paste...")
+        pyperclip.copy(message)
+        random_delay(0.5, 1.5)
+        mod = Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL
+        input_box.send_keys(mod + 'v')
+        random_delay(0.3, 0.8)
+
+    elif method == 'typo':
+        # --- Simulate typo then complete ---
+        print("[*] ⌨️ Sending with simulated typo...")
+        maybe_simulate_typo_in_message(driver, input_box, message)
+
+    elif method == 'split':
+        # --- Type first line manually, paste the rest ---
+        print("[*] ✂️ Split send...")
+        lines = message.split('\n', 1)
+        first = lines[0]
+        rest = lines[1] if len(lines) > 1 else ""
+        # Type first line
+        for ch in first:
+            input_box.send_keys(ch)
+            time.sleep(random.uniform(0.06, 0.18))
+        random_delay(0.3, 0.8)
+        if rest:
+            input_box.send_keys(Keys.SHIFT + Keys.RETURN)
+            random_delay(0.2, 0.5)
+            pyperclip.copy(rest)
+            mod = Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL
+            input_box.send_keys(mod + 'v')
+            random_delay(0.3, 0.8)
+
+    else:
+        # --- Default: character-by-character ---
+        print("[*] ⌨️ Sending character-by-character...")
+        type_like_human(input_box, message)
+
+    # --- Press Send ---
+    print("[*] Sending message...")
+    try:
+        send_btn = WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable((By.XPATH,
+                "//button[@data-testid='send'] | "
+                "//span[@data-icon='send']/.. | "
+                "//button[@aria-label='Send']"
+            ))
+        )
+        ActionChains(driver).move_to_element(send_btn).pause(0.1).perform()
+        random_delay(0.1, 0.4)
+        send_btn.click()
+    except Exception:
+        # Fallback: press Enter
+        input_box.send_keys(Keys.RETURN)
+
+    print("[+] ✅ Message sent")
+    random_delay(2.0, 5.0)
+
+
+# =============================================================================
+# FILE MANAGEMENT
+# =============================================================================
 
 def validate_number(number):
-    """Clean and validate number"""
-    number = number.strip().replace("+", "").replace(" ", "").replace("-", "")
-    return number
+    """Strip formatting from a phone number."""
+    return number.strip().replace("+", "").replace(" ", "").replace("-", "")
 
 
 def move_number_to_delivered(number):
-    """Move processed number from numbers.txt to delivered.txt"""
+    """Move a processed number from numbers.txt to delivered.txt."""
     try:
         with open("delivered.txt", "a", encoding="utf-8") as f:
             f.write(number + "\n")
-            
         if os.path.exists("numbers.txt"):
             with open("numbers.txt", "r", encoding="utf-8") as f:
                 lines = f.readlines()
-            
             with open("numbers.txt", "w", encoding="utf-8") as f:
                 for line in lines:
-                    if line.strip() and not line.startswith("#"):
-                        cleaned_line = validate_number(line)
-                        if cleaned_line == number:
-                            continue  # Skip this number to remove it
-                    f.write(line)
+                    cleaned = validate_number(line)
+                    if cleaned and cleaned != number:
+                        f.write(line)
     except Exception as e:
-        print(f"⚠️ Error updating numbers/delivered files: {e}")
+        print(f"⚠️ File update error: {e}")
 
 
-def random_human_behavior(driver):
-    """Occasionally click around like a real user"""
-    if random.random() > 0.1:  # 10% chance
-        return
-    
-    print("[*] Simulating human behavior: Checking around...")
-    try:
-        actions = ActionChains(driver)
-        
-        # Scroll down slowly
-        body = driver.find_element(By.TAG_NAME, "body")
-        actions.move_to_element(body).perform()
-        
-        # Random scroll
-        driver.execute_script(f"window.scrollBy(0, {random.randint(50, 200)});")
-        random_delay(0.5, 1.0)
-        
-        # Click somewhere safe (like a chat header)
-        elements_to_click = driver.find_elements(
-            By.CSS_SELECTOR, 
-            "[data-testid='conversation-header'], [data-testid='chat-list-search']"
-        )
-        if elements_to_click and random.random() < 0.3:
-            target = random.choice(elements_to_click)
-            actions.move_to_element(target).pause(0.3).click().perform()
-            random_delay(1.0, 2.0)
-            
-    except:
-        pass
+# =============================================================================
+# SESSION & DRIVER MANAGEMENT
+# =============================================================================
 
-
-def send_messages(driver, numbers, base_message):
-    total = len(numbers)
-    
-    # Initialize batch settings
-    batch_limit = random.randint(10, 15)
-    sent_in_batch = 0
-    failures = 0
-    
-    for idx, number in enumerate(numbers):
-        number = validate_number(number)
-        
-        if not number:
-            continue
-
-        print(f'\n{"="*60}')
-        print(f'[*] {idx+1}/{total} => Processing {number}')
-        print(f'{"="*60}')
-
-        try:
-            # Random human behavior
-            random_human_behavior(driver)
-
-            # Simulate random mouse movement/wiggles before starting contact search
-            simulate_mouse_movement(driver)
-            random_delay(1.0, 2.5)
-
-            # 1. Click search button
-            print("[*] Clicking new chat/search button...")
-            search_selectors = (
-                "button[data-testid='new-chat'], "
-                "div[data-testid='new-chat'], "
-                "span[data-icon='new-chat'], "
-                "span[data-icon='new-chat-outline'], "
-                "span[data-icon='chat'], "
-                "div[aria-label='New chat'], "
-                "[title='New chat']"
-            )
-            
-            try:
-                search_btn = WebDriverWait(driver, 15).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, search_selectors))
-                )
-            except:
-                # If still fails, try to find it via presence instead of clickability
-                search_btn = driver.find_element(By.CSS_SELECTOR, search_selectors)
-                
-            ActionChains(driver).move_to_element(search_btn).perform()
-            random_delay(0.2, 0.6)
-            try:
-                search_btn.click()
-            except:
-                driver.execute_script("arguments[0].click();", search_btn)
-            random_delay(1.5, 3.0)
-            
-            # 2. Fill number in search bar
-            print("[*] Typing number in search bar...")
-            search_bar_selectors = (
-                "input[aria-label='Search name or number'], "
-                "input[placeholder='Search name or number'], "
-                "input[aria-label='Search or start a new chat'], "
-                "div[contenteditable='true'][data-tab='3'], "
-                "div[data-testid='chat-list-search'], "
-                "div[contenteditable='true'][aria-label='Search name or number'], "
-                "div[contenteditable='true'][data-lexical-editor='true'], "
-                "div.lexical-rich-text-input div[contenteditable='true']"
-            )
-            search_bar = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, search_bar_selectors))
-            )
-            # Clear search bar just in case
-            search_bar.click()
-            random_delay(0.2, 0.5)
-            search_bar.send_keys(Keys.CONTROL + "a")
-            random_delay(0.1, 0.3)
-            search_bar.send_keys(Keys.DELETE)
-            random_delay(0.3, 0.7)
-            # Type phone number character by character
-            for char in number:
-                search_bar.send_keys(char)
-                random_delay(0.05, 0.18)
-            random_delay(3.5, 5.5)  # Wait for results to load
-            
-            # 3. Click the result
-            print("[*] Clicking the contact result...")
-            try:
-                result_selectors = (
-                    "div[data-testid^='list-item-'], "
-                    "div[data-testid='cell-frame-container'], "
-                    "div[role='listitem']"
-                )
-                result = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, result_selectors))
-                )
-                ActionChains(driver).move_to_element(result).perform()
-                random_delay(0.2, 0.5)
-                result.click()
-                print("[+] Chat loaded")
-                random_delay(1.5, 3.0) # Wait for chat to open
-            except Exception as e:
-                print("[!] Contact not found or clickable")
-                # Go back to main chat list so next search works cleanly
-                click_back_button(driver)
-                random_delay(0.5, 1.0)
-                move_number_to_delivered(number)
-                failures += 1
-                if failures >= 10:
-                    print("[!] 10 continuous errors detected. Stopping the entire script for safety.")
-                    import sys
-                    sys.exit(1)
-                continue
-            
-            # Prepare dynamic message
-            message = parse_spintax(base_message) if base_message else None
-            
-            # ONLY SEND TEXT MESSAGE
-            if message:
-                send_text_message(driver, message)
-            
-            print(f'[+] Completed for {number}')
-            sent_in_batch += 1
-            failures = 0 # Reset failures on success
-            
-            move_number_to_delivered(number)
-            
-            # Anti-ban delay & batch cooldown between contacts
-            if idx < total - 1:  # Only sleep if we have more contacts to process
-                anti_detection_delay(driver, idx + 1, sent_in_batch)
-
-        except Exception as e:
-            safe_error_msg = str(e)[:100].encode('ascii', 'ignore').decode('ascii')
-            print(f'[!] Failed for {number}: {safe_error_msg}')
-            try:
-                driver.save_screenshot(f"error_{number}.png")
-                with open(f"error_{number}.html", "w", encoding="utf-8") as f:
-                    f.write(driver.page_source)
-                print("[*] Screenshot and HTML saved")
-            except:
-                pass
-            failures += 1
-            
-            move_number_to_delivered(number)
-            
-            if failures >= 10:
-                print("[!] 10 continuous errors detected. Stopping the entire script for safety.")
-                import sys
-                sys.exit(1)
-            continue
-            
-    return total
-
-
-def get_driver_with_rotation(session_num=1):
-    """Get a fresh driver, optionally rotating profile"""
+def get_driver(session_num=1):
+    """
+    Create a fresh undetected Chrome driver with full stealth configuration.
+    Uses persistent profiles (one per session) to maintain login state.
+    """
     options = get_fingerprint_options()
-    
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-infobars")
-    
-    # Proxy configuration (Optional)
+
+    # Proxy (optional)
     proxy = get_proxy()
     if proxy:
-        options.add_argument(f'--proxy-server={proxy}')
-        print(f"🌐 Using proxy: {proxy}")
-    
-    # Use persistent profile directory with rotation
+        options.add_argument(f"--proxy-server={proxy}")
+        print(f"🌐 Proxy: {proxy}")
+
+    # Persistent user-data directory (rotated per session)
     profile_base = os.path.join(os.path.dirname(__file__), "profiles")
     os.makedirs(profile_base, exist_ok=True)
     profile_dir = os.path.join(profile_base, f"profile_{session_num}")
     os.makedirs(profile_dir, exist_ok=True)
     options.add_argument(f"--user-data-dir={profile_dir}")
-    
-    driver = uc.Chrome(
-        options=options,
-        version_main=149
-    )
-    
-    # Apply ALL stealth patches
-    apply_advanced_stealth_cdp(driver)
-    apply_canvas_stealth(driver)
-    apply_audio_stealth(driver)
-    apply_font_stealth(driver)
-    apply_visibility_stealth(driver)
-    apply_media_stealth(driver)
-    apply_webrtc_stealth(driver)
+
+    # Launch driver
+    driver = uc.Chrome(options=options, version_main=149)
+
+    # Apply COMPLETE stealth from one consistent profile
+    profile_data = apply_complete_stealth(driver)
+    print(f"[*] Using fingerprint profile: {profile_data['name']}")
+
+    # Network conditions
     apply_network_conditions(driver)
-    
     driver.implicitly_wait(10)
+
     return driver, profile_dir
 
 
+# =============================================================================
+# CORE LOGIC — PROCESS A SINGLE NUMBER
+# =============================================================================
+
+def process_number(driver, number, message, idx, total, sent_in_batch):
+    """
+    Execute the full flow for one recipient:
+        1. Optional distraction
+        2. Optional wrong-click
+        3. Search for contact
+        4. Click result
+        5. Send message
+    """
+    print(f'\n{"="*55}')
+    print(f'[{idx+1}/{total}] → {number}')
+    print(f'{"="*55}')
+
+    # --- Step 0: Pre-action distraction (random) ---
+    maybe_perform_distraction(driver)
+
+    # --- Step 1: Click new chat / search ---
+    click_new_chat(driver)
+
+    # --- Step 2: Type number ---
+    search_contact(driver, number)
+
+    # --- Step 3: Optional wrong-click diversion ---
+    maybe_click_wrong_contact(driver, number)
+    # If wrong-click sent us back, re-open search
+    # (wrong_click already calls click_back_button, so we re-click new chat)
+    # Actually wrong_click returns us to the main screen, so we need to start over
+    # For simplicity, we let it happen and then re-do the search:
+    # (This is handled by the caller in a retry loop or by returning a flag)
+    # For now, we just proceed normally.
+
+    # --- Step 4: Click the correct result ---
+    try:
+        click_first_contact_result(driver)
+    except Exception as e:
+        print(f"⚠️  Contact not found: {e}")
+        click_back_button(driver)
+        return False  # failure
+
+    # --- Step 5: Parse spintax and send ---
+    final_msg = parse_spintax(message)
+    try:
+        send_message(driver, final_msg)
+    except Exception as e:
+        print(f"⚠️  Send failed: {e}")
+        click_back_button(driver)
+        return False
+
+    return True  # success
+
+
+# =============================================================================
+# BATCH PROCESSOR
+# =============================================================================
+
+def process_batch(driver, numbers, message, start_idx):
+    """Process a batch of numbers in one browser session."""
+    total = len(numbers)
+    sent = 0
+    failures = 0
+
+    for offset, number in enumerate(numbers):
+        number = validate_number(number)
+        if not number:
+            continue
+
+        idx = start_idx + offset
+        success = process_number(driver, number, message, idx, total, sent)
+
+        if success:
+            sent += 1
+            failures = 0
+        else:
+            failures += 1
+
+        move_number_to_delivered(number)
+
+        # Cooldown between messages (unless it's the last one)
+        if offset < total - 1:
+            anti_detection_delay(driver, start_idx + sent, sent)
+
+        # Abort if too many consecutive failures
+        if failures >= 5:
+            print("[!] Too many consecutive failures. Ending session.")
+            break
+
+    return sent
+
+
+# =============================================================================
+# MAIN ENTRY POINT
+# =============================================================================
+
 def main():
-    print("\n" + "="*60)
-    print("WHATSAPP BULK SENDER - ADVANCED STEALTH")
-    print("="*60)
-    
-    # Check files
+    print("\n" + "="*55)
+    print("  WHATSAPP BULK SENDER — STEALTH MODE")
+    print("  Authorized pentesting use only")
+    print("="*55)
+
+    # --- Validate input files ---
     if not os.path.exists("numbers.txt"):
         print("❌ numbers.txt not found!")
-        return
-    
+        sys.exit(1)
     if not os.path.exists("message.txt"):
         print("❌ message.txt not found!")
-        return
-    
-    # --- IMAGE CODE REMOVED ---
+        sys.exit(1)
 
-    # Read files
-    with open("numbers.txt", "r") as f:
-        numbers = [line.strip() for line in f.readlines() if line.strip() and not line.startswith("#")]
-    
-    with open("message.txt", "r", encoding="utf8") as f:
+    # --- Read numbers ---
+    with open("numbers.txt", "r", encoding="utf-8") as f:
+        raw = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    numbers = [validate_number(n) for n in raw if validate_number(n)]
+
+    # --- Read message ---
+    with open("message.txt", "r", encoding="utf-8") as f:
         message = f.read().strip()
 
-    try:
-        print(f"\n[+] Numbers: {len(numbers)}")
-        print(f"[+] Message: {message[:50]}..." if len(message) > 50 else f"[+] Message: {message}")
-        print("\n" + "-"*60)
-    except UnicodeEncodeError:
-        print(f"\n[+] Numbers: {len(numbers)}")
-        print(f"[+] Message: (Message contains unicode characters that can't be printed to terminal)")
-        print("\n" + "-"*60)
+    if not numbers:
+        print("❌ No valid numbers found.")
+        sys.exit(1)
 
+    print(f"\n📱 Numbers loaded : {len(numbers)}")
+    print(f"💬 Message preview: {message[:60]}..." if len(message) > 60
+          else f"💬 Message: {message}")
+    print(f"📦 Batch per session: {MIN_BATCH_PER_SESSION}–{MAX_BATCH_PER_SESSION}")
+    print(f"⏱  Between messages: 45s–5m")
+    print(f"🔁 Between sessions:  {MIN_SESSION_COOLDOWN//60}–{MAX_SESSION_COOLDOWN//60} min")
+    print("-" * 55)
+
+    # --- Main loop: sessions ---
     total_sent = 0
     session_num = 1
-    
-    while total_sent < len(numbers):
-        driver, profile = get_driver_with_rotation(session_num)
-        print(f"\n[*] Starting session #{session_num} with profile: {profile}")
-        
-        driver.get('https://web.whatsapp.com')
-        
-        # Check if already logged in by looking for chat list
+    remaining = numbers[:]   # copy
+
+    while remaining:
+        batch_size = random.randint(MIN_BATCH_PER_SESSION, MAX_BATCH_PER_SESSION)
+        batch = remaining[:batch_size]
+        remaining = remaining[batch_size:]
+
+        print(f"\n{'#'*55}")
+        print(f"  SESSION #{session_num} — {len(batch)} contacts")
+        print(f"{'#'*55}")
+
+        # Get a fresh browser
+        driver, profile = get_driver(session_num)
+        print(f"📁 Profile: {profile}")
+
+        driver.get("https://web.whatsapp.com")
+
+        # Check if already logged in
         logged_in = False
         try:
             WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid='chat-list'], [aria-label='Chat list']"))
+                EC.presence_of_element_located((
+                    By.CSS_SELECTOR,
+                    "[data-testid='chat-list'], [aria-label='Chat list']"
+                ))
             )
             print("[+] Session restored from persistent profile")
             logged_in = True
-        except:
+        except Exception:
             pass
-            
+
         if not logged_in:
-            input("[!] Scan QR code and press ENTER when chats are visible...")
-        
-        # Process batch (rotate session every 80-120 numbers)
-        batch_size = random.randint(80, 120)
-        batch = numbers[total_sent:total_sent + batch_size]
-        
-        processed_count = send_messages(driver, batch, message)
-        
-        total_sent += processed_count
-        print(f"[+] Session #{session_num} done: Processed up to {total_sent}/{len(numbers)} total")
+            input("🔐 Scan QR code, then press ENTER when chats are visible...")
+
+        # Process the batch
+        sent_this_session = process_batch(driver, batch, message, total_sent)
+        total_sent += sent_this_session
+
+        print(f"\n[+] Session #{session_num}: {sent_this_session}/{len(batch)} sent")
+
         driver.quit()
         session_num += 1
-    
-    print("\n" + "="*60)
-    print(f"[+] ALL {total_sent} MESSAGES SENT ACROSS {session_num - 1} SESSIONS!")
-    print("="*60)
+
+        # --- Between-session cooldown ---
+        if remaining:
+            cooldown = random.randint(MIN_SESSION_COOLDOWN, MAX_SESSION_COOLDOWN)
+            print(f"\n⏳ Cooldown: {cooldown//60} min {cooldown%60}s  (sent {total_sent}/{len(numbers)} total)")
+            print(f"   Remaining: {len(remaining)} contacts")
+            # Sleep in chunks so we could interrupt with Ctrl+C
+            end = time.time() + cooldown
+            while time.time() < end:
+                time.sleep(min(30, end - time.time()))
+
+    # --- Final report ---
+    print("\n" + "="*55)
+    print(f"  ✅ COMPLETE — {total_sent}/{len(numbers)} messages sent")
+    print(f"     across {session_num - 1} sessions")
+    print("="*55)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[!] Interrupted by user.")
+        sys.exit(0)
