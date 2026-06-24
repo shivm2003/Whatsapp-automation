@@ -45,80 +45,7 @@ from utils import (
 )
 
 # =============================================================================
-# OVERLAY / DIALOG DISMISSAL
-# =============================================================================
-
-def dismiss_overlays(driver):
-    """Wait for and dismiss any blocking overlays."""
-    overlay_selectors = [
-        "div.x1n2onr6.xupqr0c",           # The specific overlay from the error
-        "div[data-testid='drawer-overlay']",
-        "div[role='dialog']",              # Generic dialog overlay
-        "div[aria-modal='true']",
-    ]
-    for sel in overlay_selectors:
-        try:
-            overlay = driver.find_element(By.CSS_SELECTOR, sel)
-            if overlay.is_displayed():
-                print(f"[*] Dismissing overlay: {sel}")
-                ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-                random_delay(0.5, 1.0)
-        except Exception:
-            pass
-    # Wait for any animated overlays to settle
-    smart_wait(driver, 1.0, 2.0)
-
-
-def wait_for_chat_to_load(driver, timeout=15):
-    """
-    After clicking a contact, wait for the chat view to fully render.
-    This waits for both the overlay to disappear AND the message input to appear.
-    """
-    print("[*] Waiting for chat view to fully load...")
-
-    # Step 1: Wait for blocking overlay to disappear
-    try:
-        WebDriverWait(driver, timeout).until_not(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div.x1n2onr6.xupqr0c"))
-        )
-    except Exception:
-        pass
-
-    random_delay(1.0, 2.0)
-
-    # Step 2: Press Escape once more to dismiss any lingering dialog
-    try:
-        ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-        random_delay(0.5, 1.0)
-    except Exception:
-        pass
-
-    # Step 3: Wait for ANY of these indicators that the chat is loaded
-    chat_loaded_selectors = [
-        "div[data-testid='conversation-compose-box-input']",
-        "div[contenteditable='true'][data-tab='1']",
-        "div[data-testid='conversation-info-header']",
-        "header[data-testid='conversation-header']",
-        "div[data-testid='conversation-panel-messages']",
-    ]
-
-    for sel in chat_loaded_selectors:
-        try:
-            WebDriverWait(driver, timeout).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, sel))
-            )
-            print(f"[+] Chat loaded — detected by: {sel}")
-            return True
-        except Exception:
-            continue
-
-    # Step 4: If still not loaded, try clicking the result one more time
-    print("[*] Chat not fully loaded yet, attempting re-click...")
-    return False
-
-
-# =============================================================================
-# NAVIGATION HELPERS
+# NAVIGATION HELPERS — Simplified like the second code
 # =============================================================================
 
 def click_back_button(driver):
@@ -161,9 +88,7 @@ def click_back_button(driver):
 def click_new_chat(driver):
     """Click the 'New chat' / search button."""
     print("[*] Clicking 'New Chat' / search button...")
-    # Dismiss overlays first
-    dismiss_overlays(driver)
-
+    
     selectors = (
         "button[data-testid='new-chat'], "
         "div[data-testid='new-chat'], "
@@ -173,31 +98,43 @@ def click_new_chat(driver):
         "div[aria-label='New chat'], "
         "[title='New chat']"
     )
-    btn = WebDriverWait(driver, 15).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, selectors))
-    )
-    ActionChains(driver).move_to_element(btn).perform()
+    
+    try:
+        search_btn = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, selectors))
+        )
+    except:
+        # If still fails, try to find it via presence instead of clickability
+        search_btn = driver.find_element(By.CSS_SELECTOR, selectors)
+        
+    ActionChains(driver).move_to_element(search_btn).perform()
     random_delay(0.2, 0.6)
     try:
-        btn.click()
+        search_btn.click()
     except Exception:
-        driver.execute_script("arguments[0].click();", btn)
+        driver.execute_script("arguments[0].click();", search_btn)
     random_delay(1.5, 3.5)
 
 
 def search_contact(driver, number):
     """Type the phone number into the search bar."""
     print(f"[*] Search input located, typing contact number: {number}...")
+    
     selectors = (
         "input[aria-label='Search name or number'], "
         "input[placeholder='Search name or number'], "
         "input[aria-label='Search or start a new chat'], "
         "div[contenteditable='true'][data-tab='3'], "
+        "div[data-testid='chat-list-search'], "
+        "div[contenteditable='true'][aria-label='Search name or number'], "
+        "div[contenteditable='true'][data-lexical-editor='true'], "
         "div.lexical-rich-text-input div[contenteditable='true']"
     )
+    
     search_bar = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, selectors))
     )
+    
     # Focus + clear
     try:
         search_bar.click()
@@ -220,97 +157,36 @@ def search_contact(driver, number):
 
     print(f"[*] Number {number} typed. Waiting for search results to load...")
     # Wait for results to load
-    smart_wait(driver, 3.0, 6.0)
+    smart_wait(driver, 3.5, 5.5)
 
 
 def click_first_contact_result(driver):
-    """Click the top contact search result with robust overlay handling."""
-    # First dismiss any overlays that might be blocking
-    dismiss_overlays(driver)
-
-    # Wait for result to be present
+    """Click the top contact search result — simplified like working code."""
+    print("[*] Clicking the contact result...")
+    
     selectors = (
         "div[data-testid^='list-item-'], "
         "div[data-testid='cell-frame-container'], "
         "div[role='listitem']"
     )
-    result = WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.CSS_SELECTOR, selectors))
-    )
-
-    # Scroll the result into view within the scrollable panel
+    
     try:
-        driver.execute_script(
-            "arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});",
-            result
+        result = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, selectors))
         )
-        random_delay(0.3, 0.7)
-    except Exception:
-        pass
-
-    # Check if anything is still overlaying the target
-    try:
-        overlay_check = driver.find_element(By.CSS_SELECTOR, "div.x1n2onr6.xupqr0c")
-        if overlay_check.is_displayed():
-            print("[*] Overlay still present after scroll, pressing Escape...")
-            ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-            random_delay(0.5, 1.0)
-    except Exception:
-        pass
-
-    # Multiple click strategies
-    strategies = [
-        ("ActionChains move + click", lambda: ActionChains(driver)
-            .move_to_element(result)
-            .pause(random.uniform(0.1, 0.3))
-            .click()
-            .perform()),
-        ("Direct click", lambda: result.click()),
-        ("JS click", lambda: driver.execute_script("arguments[0].click();", result)),
-        ("JS mouse event dispatch", lambda: driver.execute_script("""
-            var el = arguments[0];
-            var rect = el.getBoundingClientRect();
-            var event = new MouseEvent('click', {
-                bubbles: true,
-                cancelable: true,
-                clientX: rect.left + rect.width/2,
-                clientY: rect.top + rect.height/2
-            });
-            el.dispatchEvent(event);
-        """, result)),
-    ]
-
-    last_exception = None
-    for name, click_fn in strategies:
-        try:
-            click_fn()
-            print(f"[+] Click successful via: {name}")
-            random_delay(1.0, 2.0)
-
-            # Wait for chat to fully load
-            if wait_for_chat_to_load(driver):
-                print("[+] Chat opened and ready")
-                return
-
-            # If chat didn't load, try next strategy
-            print("[*] Chat not ready after this strategy, trying next...")
-            continue
-
-        except Exception as e:
-            last_exception = e
-            print(f"[-] {name} failed: {e}")
-            random_delay(0.5, 1.0)
-            continue
-
-    if last_exception:
-        raise last_exception
+        ActionChains(driver).move_to_element(result).perform()
+        random_delay(0.2, 0.5)
+        result.click()
+        print("[+] Chat loaded")
+        random_delay(1.5, 3.0)  # Wait for chat to open — let WhatsApp handle its own transitions
+        return True
+    except Exception as e:
+        print(f"[!] Contact not found or clickable: {e}")
+        return False
 
 
 def find_message_input(driver):
     """Locate the message compose box with retry logic."""
-    # First try to dismiss anything blocking the view
-    dismiss_overlays(driver)
-
     max_attempts = 3
     for attempt in range(max_attempts):
         xpaths = [
@@ -330,14 +206,6 @@ def find_message_input(driver):
                 continue
 
         print(f"[*] Attempt {attempt+1}/{max_attempts}: input not found, retrying...")
-
-        # Wait for chat to load properly
-        wait_for_chat_to_load(driver, timeout=5)
-
-        try:
-            ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-        except Exception:
-            pass
         random_delay(1.0, 2.0)
 
     raise Exception("Could not locate message input box after multiple attempts")
@@ -358,10 +226,10 @@ def send_message(driver, message):
 
     # Choose a sending method
     method_weights = {
-        'type':   0.50,   # character-by-character with typos
-        'paste':  0.25,   # clipboard paste
-        'typo':   0.15,   # deliberate typo + correction
-        'split':  0.10,   # type first line, paste second line
+        'type':   0.50,
+        'paste':  0.25,
+        'typo':   0.15,
+        'split':  0.10,
     }
     methods = list(method_weights.keys())
     weights = list(method_weights.values())
@@ -370,7 +238,7 @@ def send_message(driver, message):
 
     if method == 'paste':
         # --- Paste via clipboard ---
-        print("[*] 📋 Sending via paste...")
+        print("[*] Sending via paste...")
         pyperclip.copy(message)
         random_delay(0.5, 1.5)
         mod = Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL
@@ -379,12 +247,12 @@ def send_message(driver, message):
 
     elif method == 'typo':
         # --- Simulate typo then complete ---
-        print("[*] ⌨️ Sending with simulated typo...")
+        print("[*] Sending with simulated typo...")
         maybe_simulate_typo_in_message(driver, input_box, message)
 
     elif method == 'split':
         # --- Type first line manually, paste the rest ---
-        print("[*] ✂️ Split send...")
+        print("[*] Split send...")
         lines = message.split('\n', 1)
         first = lines[0]
         rest = lines[1] if len(lines) > 1 else ""
@@ -403,7 +271,7 @@ def send_message(driver, message):
 
     else:
         # --- Default: character-by-character ---
-        print("[*] ⌨️ Sending character-by-character...")
+        print("[*] Sending character-by-character...")
         type_like_human(input_box, message)
 
     # --- Press Send ---
@@ -423,7 +291,7 @@ def send_message(driver, message):
         # Fallback: press Enter
         input_box.send_keys(Keys.RETURN)
 
-    print("[+] ✅ Message sent")
+    print("[+] Message sent")
     random_delay(2.0, 5.0)
 
 
@@ -450,7 +318,7 @@ def move_number_to_delivered(number):
                     if cleaned and cleaned != number:
                         f.write(line)
     except Exception as e:
-        print(f"⚠️ File update error: {e}")
+        print(f"File update error: {e}")
 
 
 # =============================================================================
@@ -468,7 +336,7 @@ def get_driver(session_num=1):
     proxy = get_proxy()
     if proxy:
         options.add_argument(f"--proxy-server={proxy}")
-        print(f"🌐 Proxy: {proxy}")
+        print(f"Proxy: {proxy}")
 
     # Persistent user-data directory (rotated per session)
     profile_base = os.path.join(os.path.dirname(__file__), "profiles")
@@ -505,7 +373,7 @@ def process_number(driver, number, message, idx, total, sent_in_batch):
         5. Send message
     """
     print(f'\n{"="*55}')
-    print(f'[{idx+1}/{total}] → {number}')
+    print(f'[{idx+1}/{total}] -> {number}')
     print(f'{"="*55}')
 
     # --- Step 0: Pre-action distraction (random) ---
@@ -525,22 +393,25 @@ def process_number(driver, number, message, idx, total, sent_in_batch):
 
     # --- Step 4: Click the correct result ---
     try:
-        click_first_contact_result(driver)
+        success = click_first_contact_result(driver)
+        if not success:
+            click_back_button(driver)
+            return False
     except Exception as e:
-        print(f"⚠️  Contact not found or click failed: {e}")
+        print(f"Contact not found or click failed: {e}")
         click_back_button(driver)
-        return False  # failure
+        return False
 
     # --- Step 5: Parse spintax and send ---
     final_msg = parse_spintax(message)
     try:
         send_message(driver, final_msg)
     except Exception as e:
-        print(f"⚠️  Send failed: {e}")
+        print(f"Send failed: {e}")
         click_back_button(driver)
         return False
 
-    return True  # success
+    return True
 
 
 # =============================================================================
@@ -593,10 +464,10 @@ def main():
 
     # --- Validate input files ---
     if not os.path.exists("numbers.txt"):
-        print("❌ numbers.txt not found!")
+        print("numbers.txt not found!")
         sys.exit(1)
     if not os.path.exists("message.txt"):
-        print("❌ message.txt not found!")
+        print("message.txt not found!")
         sys.exit(1)
 
     # --- Read numbers ---
@@ -609,15 +480,15 @@ def main():
         message = f.read().strip()
 
     if not numbers:
-        print("❌ No valid numbers found.")
+        print("No valid numbers found.")
         sys.exit(1)
 
-    print(f"\n📱 Numbers loaded : {len(numbers)}")
-    print(f"💬 Message preview: {message[:60]}..." if len(message) > 60
-          else f"💬 Message: {message}")
-    print(f"📦 Batch per session: {MIN_BATCH_PER_SESSION}–{MAX_BATCH_PER_SESSION}")
-    print(f"⏱  Between messages: 45s–5m")
-    print(f"🔁 Between sessions:  {MIN_SESSION_COOLDOWN//60}–{MAX_SESSION_COOLDOWN//60} min")
+    print(f"\nNumbers loaded : {len(numbers)}")
+    print(f"Message preview: {message[:60]}..." if len(message) > 60
+          else f"Message: {message}")
+    print(f"Batch per session: {MIN_BATCH_PER_SESSION}-{MAX_BATCH_PER_SESSION}")
+    print(f"Between messages: 45s-5m")
+    print(f"Between sessions:  {MIN_SESSION_COOLDOWN//60}-{MAX_SESSION_COOLDOWN//60} min")
     print("-" * 55)
 
     # --- Main loop: sessions ---
@@ -636,7 +507,7 @@ def main():
 
         # Get a fresh browser
         driver, profile = get_driver(session_num)
-        print(f"📁 Profile: {profile}")
+        print(f"Profile: {profile}")
 
         driver.get("https://web.whatsapp.com")
 
@@ -655,7 +526,7 @@ def main():
             pass
 
         if not logged_in:
-            input("🔐 Scan QR code, then press ENTER when chats are visible...")
+            input("Scan QR code, then press ENTER when chats are visible...")
 
         # Wait for WhatsApp Web interface to finish loading/syncing
         print("[*] Waiting for WhatsApp Web interface to fully stabilize...")
@@ -665,8 +536,6 @@ def main():
             )
         except Exception:
             pass
-        # Dismiss any initial overlays
-        dismiss_overlays(driver)
         # Short random delay for rendering stabilization
         random_delay(3.0, 5.0)
 
@@ -682,7 +551,7 @@ def main():
         # --- Between-session cooldown ---
         if remaining:
             cooldown = random.randint(MIN_SESSION_COOLDOWN, MAX_SESSION_COOLDOWN)
-            print(f"\n⏳ Cooldown: {cooldown//60} min {cooldown%60}s  (sent {total_sent}/{len(numbers)} total)")
+            print(f"\nCooldown: {cooldown//60} min {cooldown%60}s  (sent {total_sent}/{len(numbers)} total)")
             print(f"   Remaining: {len(remaining)} contacts")
             # Sleep in chunks so we could interrupt with Ctrl+C
             end = time.time() + cooldown
@@ -691,7 +560,7 @@ def main():
 
     # --- Final report ---
     print("\n" + "="*55)
-    print(f"  ✅ COMPLETE — {total_sent}/{len(numbers)} messages sent")
+    print(f"  COMPLETE — {total_sent}/{len(numbers)} messages sent")
     print(f"     across {session_num - 1} sessions")
     print("="*55)
 
