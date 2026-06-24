@@ -196,7 +196,7 @@ def get_driver():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--start-maximized")
-    options.add_experimental_option("excludeSwitches", ["enable-logging"])
+    # options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
     # ✅ Optional: keep login session (safe path)
     options.add_argument("user-data-dir=C:/temp/chrome-profile")

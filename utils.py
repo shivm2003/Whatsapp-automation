@@ -172,8 +172,8 @@ def get_fingerprint_options():
 
     # --- Disable automation flags ---
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
+    # options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    # options.add_experimental_option("useAutomationExtension", False)
 
     # --- Performance & sandbox (safe for headless or headed) ---
     options.add_argument("--no-sandbox")
@@ -281,7 +281,13 @@ def type_like_human(element, text):
     - Occasional typos (backspace + correct)
     - Pauses at punctuation
     """
-    element.click()
+    try:
+        element.click()
+    except Exception:
+        try:
+            element.parent.execute_script("arguments[0].click();", element)
+        except Exception:
+            pass
     random_delay(0.4, 1.2)
 
     text_len = len(text)
@@ -386,11 +392,11 @@ def maybe_perform_distraction(driver):
         driver.execute_script(f"window.scrollBy(0, {random.randint(-200, 200)});")
         random_delay(1.0, 3.0)
 
-        # Click a safe element (e.g., the header, a random chat label)
+        # Click a safe element (e.g., the header, or the sidebar pane background)
         targets = driver.find_elements(By.CSS_SELECTOR,
             "[data-testid='conversation-header'], "
             "header, "
-            "div[role='button']:not([data-testid='send'])"
+            "#pane-side"
         )
         if targets and random.random() < 0.35:
             t = random.choice(targets)

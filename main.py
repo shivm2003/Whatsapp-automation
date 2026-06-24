@@ -45,6 +45,79 @@ from utils import (
 )
 
 # =============================================================================
+# OVERLAY / DIALOG DISMISSAL
+# =============================================================================
+
+def dismiss_overlays(driver):
+    """Wait for and dismiss any blocking overlays."""
+    overlay_selectors = [
+        "div.x1n2onr6.xupqr0c",           # The specific overlay from the error
+        "div[data-testid='drawer-overlay']",
+        "div[role='dialog']",              # Generic dialog overlay
+        "div[aria-modal='true']",
+    ]
+    for sel in overlay_selectors:
+        try:
+            overlay = driver.find_element(By.CSS_SELECTOR, sel)
+            if overlay.is_displayed():
+                print(f"[*] Dismissing overlay: {sel}")
+                ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+                random_delay(0.5, 1.0)
+        except Exception:
+            pass
+    # Wait for any animated overlays to settle
+    smart_wait(driver, 1.0, 2.0)
+
+
+def wait_for_chat_to_load(driver, timeout=15):
+    """
+    After clicking a contact, wait for the chat view to fully render.
+    This waits for both the overlay to disappear AND the message input to appear.
+    """
+    print("[*] Waiting for chat view to fully load...")
+
+    # Step 1: Wait for blocking overlay to disappear
+    try:
+        WebDriverWait(driver, timeout).until_not(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.x1n2onr6.xupqr0c"))
+        )
+    except Exception:
+        pass
+
+    random_delay(1.0, 2.0)
+
+    # Step 2: Press Escape once more to dismiss any lingering dialog
+    try:
+        ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+        random_delay(0.5, 1.0)
+    except Exception:
+        pass
+
+    # Step 3: Wait for ANY of these indicators that the chat is loaded
+    chat_loaded_selectors = [
+        "div[data-testid='conversation-compose-box-input']",
+        "div[contenteditable='true'][data-tab='1']",
+        "div[data-testid='conversation-info-header']",
+        "header[data-testid='conversation-header']",
+        "div[data-testid='conversation-panel-messages']",
+    ]
+
+    for sel in chat_loaded_selectors:
+        try:
+            WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+            )
+            print(f"[+] Chat loaded — detected by: {sel}")
+            return True
+        except Exception:
+            continue
+
+    # Step 4: If still not loaded, try clicking the result one more time
+    print("[*] Chat not fully loaded yet, attempting re-click...")
+    return False
+
+
+# =============================================================================
 # NAVIGATION HELPERS
 # =============================================================================
 
@@ -61,7 +134,10 @@ def click_back_button(driver):
             btn = WebDriverWait(driver, 4).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
             )
-            btn.click()
+            try:
+                btn.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", btn)
             random_delay(1.0, 2.0)
             return True
         except Exception:
@@ -71,7 +147,10 @@ def click_back_button(driver):
         btn = driver.find_element(By.XPATH,
             "//header//div[@role='button']"
         )
-        btn.click()
+        try:
+            btn.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", btn)
         random_delay(1.0, 2.0)
         return True
     except Exception:
@@ -81,6 +160,10 @@ def click_back_button(driver):
 
 def click_new_chat(driver):
     """Click the 'New chat' / search button."""
+    print("[*] Clicking 'New Chat' / search button...")
+    # Dismiss overlays first
+    dismiss_overlays(driver)
+
     selectors = (
         "button[data-testid='new-chat'], "
         "div[data-testid='new-chat'], "
@@ -104,6 +187,7 @@ def click_new_chat(driver):
 
 def search_contact(driver, number):
     """Type the phone number into the search bar."""
+    print(f"[*] Search input located, typing contact number: {number}...")
     selectors = (
         "input[aria-label='Search name or number'], "
         "input[placeholder='Search name or number'], "
@@ -115,7 +199,10 @@ def search_contact(driver, number):
         EC.presence_of_element_located((By.CSS_SELECTOR, selectors))
     )
     # Focus + clear
-    search_bar.click()
+    try:
+        search_bar.click()
+    except Exception:
+        driver.execute_script("arguments[0].click();", search_bar)
     random_delay(0.2, 0.5)
     search_bar.send_keys(Keys.CONTROL + "a")
     random_delay(0.1, 0.3)
@@ -131,45 +218,129 @@ def search_contact(driver, number):
         else:
             time.sleep(random.uniform(0.06, 0.18))
 
+    print(f"[*] Number {number} typed. Waiting for search results to load...")
     # Wait for results to load
     smart_wait(driver, 3.0, 6.0)
 
 
 def click_first_contact_result(driver):
-    """Click the top contact search result."""
+    """Click the top contact search result with robust overlay handling."""
+    # First dismiss any overlays that might be blocking
+    dismiss_overlays(driver)
+
+    # Wait for result to be present
     selectors = (
-        "div[data-testid^='list-item-']:first-child, "
-        "div[role='listitem']:first-child, "
-        "div[data-testid='cell-frame-container']:first-child"
+        "div[data-testid^='list-item-'], "
+        "div[data-testid='cell-frame-container'], "
+        "div[role='listitem']"
     )
-    result = WebDriverWait(driver, 10).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, selectors))
+    result = WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, selectors))
     )
-    ActionChains(driver).move_to_element(result).perform()
-    random_delay(0.2, 0.6)
-    result.click()
-    print("[+] Chat opened")
-    random_delay(2.0, 4.0)
+
+    # Scroll the result into view within the scrollable panel
+    try:
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center', behavior: 'instant'});",
+            result
+        )
+        random_delay(0.3, 0.7)
+    except Exception:
+        pass
+
+    # Check if anything is still overlaying the target
+    try:
+        overlay_check = driver.find_element(By.CSS_SELECTOR, "div.x1n2onr6.xupqr0c")
+        if overlay_check.is_displayed():
+            print("[*] Overlay still present after scroll, pressing Escape...")
+            ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+            random_delay(0.5, 1.0)
+    except Exception:
+        pass
+
+    # Multiple click strategies
+    strategies = [
+        ("ActionChains move + click", lambda: ActionChains(driver)
+            .move_to_element(result)
+            .pause(random.uniform(0.1, 0.3))
+            .click()
+            .perform()),
+        ("Direct click", lambda: result.click()),
+        ("JS click", lambda: driver.execute_script("arguments[0].click();", result)),
+        ("JS mouse event dispatch", lambda: driver.execute_script("""
+            var el = arguments[0];
+            var rect = el.getBoundingClientRect();
+            var event = new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                clientX: rect.left + rect.width/2,
+                clientY: rect.top + rect.height/2
+            });
+            el.dispatchEvent(event);
+        """, result)),
+    ]
+
+    last_exception = None
+    for name, click_fn in strategies:
+        try:
+            click_fn()
+            print(f"[+] Click successful via: {name}")
+            random_delay(1.0, 2.0)
+
+            # Wait for chat to fully load
+            if wait_for_chat_to_load(driver):
+                print("[+] Chat opened and ready")
+                return
+
+            # If chat didn't load, try next strategy
+            print("[*] Chat not ready after this strategy, trying next...")
+            continue
+
+        except Exception as e:
+            last_exception = e
+            print(f"[-] {name} failed: {e}")
+            random_delay(0.5, 1.0)
+            continue
+
+    if last_exception:
+        raise last_exception
 
 
 def find_message_input(driver):
-    """Locate the message compose box."""
-    xpaths = [
-        "//div[@data-testid='conversation-compose-box-input']",
-        "//div[@contenteditable='true' and @data-tab='1']",
-        "//div[contains(@class, 'copyable-text') and @contenteditable='true']",
-        "//div[contains(@class, 'lexical-rich-text-input')]//div[@contenteditable='true']",
-        "//footer//div[@contenteditable='true']"
-    ]
-    for xp in xpaths:
+    """Locate the message compose box with retry logic."""
+    # First try to dismiss anything blocking the view
+    dismiss_overlays(driver)
+
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        xpaths = [
+            "//div[@data-testid='conversation-compose-box-input']",
+            "//div[@contenteditable='true' and @data-tab='1']",
+            "//div[contains(@class, 'copyable-text') and @contenteditable='true']",
+            "//div[contains(@class, 'lexical-rich-text-input')]//div[@contenteditable='true']",
+            "//footer//div[@contenteditable='true']"
+        ]
+        for xp in xpaths:
+            try:
+                el = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, xp))
+                )
+                return el
+            except Exception:
+                continue
+
+        print(f"[*] Attempt {attempt+1}/{max_attempts}: input not found, retrying...")
+
+        # Wait for chat to load properly
+        wait_for_chat_to_load(driver, timeout=5)
+
         try:
-            el = WebDriverWait(driver, 8).until(
-                EC.element_to_be_clickable((By.XPATH, xp))
-            )
-            return el
+            ActionChains(driver).send_keys(Keys.ESCAPE).perform()
         except Exception:
-            continue
-    raise Exception("Could not locate message input box")
+            pass
+        random_delay(1.0, 2.0)
+
+    raise Exception("Could not locate message input box after multiple attempts")
 
 
 def send_message(driver, message):
@@ -177,8 +348,12 @@ def send_message(driver, message):
     Type and send the message using one of several methods,
     chosen randomly to avoid behavioural fingerprinting.
     """
+    print("[*] Locating message input area...")
     input_box = find_message_input(driver)
-    input_box.click()
+    try:
+        input_box.click()
+    except Exception:
+        driver.execute_script("arguments[0].click();", input_box)
     random_delay(0.3, 0.8)
 
     # Choose a sending method
@@ -191,6 +366,7 @@ def send_message(driver, message):
     methods = list(method_weights.keys())
     weights = list(method_weights.values())
     method = random.choices(methods, weights=weights, k=1)[0]
+    print(f"[*] Chosen delivery style: {method}")
 
     if method == 'paste':
         # --- Paste via clipboard ---
@@ -302,7 +478,7 @@ def get_driver(session_num=1):
     options.add_argument(f"--user-data-dir={profile_dir}")
 
     # Launch driver
-    driver = uc.Chrome(options=options, version_main=149)
+    driver = uc.Chrome(options=options, version_main=150)
 
     # Apply COMPLETE stealth from one consistent profile
     profile_data = apply_complete_stealth(driver)
@@ -342,19 +518,16 @@ def process_number(driver, number, message, idx, total, sent_in_batch):
     search_contact(driver, number)
 
     # --- Step 3: Optional wrong-click diversion ---
-    maybe_click_wrong_contact(driver, number)
-    # If wrong-click sent us back, re-open search
-    # (wrong_click already calls click_back_button, so we re-click new chat)
-    # Actually wrong_click returns us to the main screen, so we need to start over
-    # For simplicity, we let it happen and then re-do the search:
-    # (This is handled by the caller in a retry loop or by returning a flag)
-    # For now, we just proceed normally.
+    if maybe_click_wrong_contact(driver, number):
+        print("[*] Re-searching contact after wrong click diversion...")
+        click_new_chat(driver)
+        search_contact(driver, number)
 
     # --- Step 4: Click the correct result ---
     try:
         click_first_contact_result(driver)
     except Exception as e:
-        print(f"⚠️  Contact not found: {e}")
+        print(f"⚠️  Contact not found or click failed: {e}")
         click_back_button(driver)
         return False  # failure
 
@@ -483,6 +656,19 @@ def main():
 
         if not logged_in:
             input("🔐 Scan QR code, then press ENTER when chats are visible...")
+
+        # Wait for WhatsApp Web interface to finish loading/syncing
+        print("[*] Waiting for WhatsApp Web interface to fully stabilize...")
+        try:
+            WebDriverWait(driver, 30).until_not(
+                EC.presence_of_element_located((By.XPATH, "//*[contains(@class, 'spinner') or contains(@class, 'loading') or @role='progressbar']"))
+            )
+        except Exception:
+            pass
+        # Dismiss any initial overlays
+        dismiss_overlays(driver)
+        # Short random delay for rendering stabilization
+        random_delay(3.0, 5.0)
 
         # Process the batch
         sent_this_session = process_batch(driver, batch, message, total_sent)
